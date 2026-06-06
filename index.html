@@ -980,6 +980,16 @@
     var modal = document.getElementById('detailContent');
     modal.innerHTML = '';
 
+    var closeBar = document.createElement('div');
+    closeBar.style.cssText = 'display:flex;justify-content:flex-end;margin-bottom:0.5rem';
+    var closeBtn = document.createElement('button');
+    closeBtn.className = 'btn btn-ghost';
+    closeBtn.style.cssText = 'padding:6px 12px;font-size:0.85rem';
+    closeBtn.textContent = '✕ Close';
+    closeBtn.addEventListener('click', function() { closeModal('detailModal'); });
+    closeBar.appendChild(closeBtn);
+    modal.appendChild(closeBar);
+
     if (r.source) { var src = document.createElement('div'); src.className = 'detail-source'; src.textContent = r.source; modal.appendChild(src); }
     var title = document.createElement('div'); title.className = 'detail-title'; title.textContent = r.name; modal.appendChild(title);
 
