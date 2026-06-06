@@ -714,18 +714,18 @@
     var tagMap = {};
     recipes.forEach(function(r) { (r.tags || []).forEach(function(t) { tagMap[t] = (tagMap[t] || 0) + 1; }); });
     var recentCount = recipes.filter(function(r) { return now - r.createdAt < sevenDays; }).length;
-    var html = '<div class="drawer-item ' + (currentFilter==='all'?'active':'') + '" onclick="setFilter('all');closeDrawer()">All Recipes <span class="sidebar-count">' + recipes.length + '</span></div>';
-    html += '<div class="drawer-item ' + (currentFilter==='recent'?'active':'') + '" onclick="setFilter('recent');closeDrawer()">Recently Added <span class="sidebar-count">' + recentCount + '</span></div>';
+    var html = '<div class="drawer-item ' + (currentFilter==='all'?'active':'') + '" onclick="setFilter(\'all\');closeDrawer()">All Recipes <span class="sidebar-count">' + recipes.length + '</span></div>';
+    html += '<div class="drawer-item ' + (currentFilter==='recent'?'active':'') + '" onclick="setFilter(\'recent\');closeDrawer()">Recently Added <span class="sidebar-count">' + recentCount + '</span></div>';
     if (Object.keys(sourceMap).length) {
       html += '<div class="drawer-section-label">Sources</div>';
       Object.entries(sourceMap).sort().forEach(function(e) {
-        html += '<div class="drawer-item ' + (currentFilter==='source:'+e[0]?'active':'') + '" onclick="setFilter('source:' + esc(e[0]) + '');closeDrawer()">' + esc(e[0]) + ' <span class="sidebar-count">' + e[1] + '</span></div>';
+        html += '<div class="drawer-item ' + (currentFilter==='source:'+e[0]?'active':'') + '" onclick="setFilter(\'source:' + esc(e[0]) + '\');closeDrawer()">' + esc(e[0]) + ' <span class="sidebar-count">' + e[1] + '</span></div>';
       });
     }
     if (Object.keys(tagMap).length) {
       html += '<div class="drawer-section-label">Tags</div>';
       Object.entries(tagMap).sort().forEach(function(e) {
-        html += '<div class="drawer-item ' + (currentFilter==='tag:'+e[0]?'active':'') + '" onclick="setFilter('tag:' + esc(e[0]) + '');closeDrawer()">' + esc(e[0]) + ' <span class="sidebar-count">' + e[1] + '</span></div>';
+        html += '<div class="drawer-item ' + (currentFilter==='tag:'+e[0]?'active':'') + '" onclick="setFilter(\'tag:' + esc(e[0]) + '\');closeDrawer()">' + esc(e[0]) + ' <span class="sidebar-count">' + e[1] + '</span></div>';
       });
     }
     document.getElementById('drawerContent').innerHTML = html;
