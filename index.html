@@ -606,22 +606,19 @@
   <div class="modal" id="detailContent"></div>
 </div>
 
-<script type="module">
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-  import { getFirestore, collection, doc, getDocs, setDoc, deleteDoc, onSnapshot, orderBy, query } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
-
-  const firebaseConfig = {
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<script>
+  firebase.initializeApp({
     apiKey: "AIzaSyDz8BYTZEv6GTb_NhTi056ZMsRtV3cqCrc",
     authDomain: "recipe-box-dca97.firebaseapp.com",
     projectId: "recipe-box-dca97",
     storageBucket: "recipe-box-dca97.firebasestorage.app",
     messagingSenderId: "74114653670",
     appId: "1:74114653670:web:0cd519c78c12fe3b24ca27"
-  };
-
-  const app = initializeApp(firebaseConfig);
-  const db = getFirestore(app);
-  const recipesCol = collection(db, 'recipes');
+  });
+  const db = firebase.firestore();
+  const recipesCol = db.collection('recipes');
 
   let recipes = [];
   let editingId = null;
@@ -634,57 +631,51 @@
   /* ── Firebase sync ── */
   function load() {
     showSyncStatus('Connecting…');
-    const q = query(recipesCol, orderBy('createdAt', 'desc'));
-    onSnapshot(q, (snapshot) => {
-      recipes = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+    recipesCol.orderBy('createdAt', 'desc').onSnapshot(function(snapshot) {
+      recipes = snapshot.docs.map(function(d) { return Object.assign({ id: d.id }, d.data()); });
       renderSidebar();
       renderRecipes();
       hideSyncStatus();
-    }, (err) => {
+      checkImportParams();
+    }, function(err) {
       console.error('Firestore error', err);
       showSyncStatus('Offline — changes may not save', true);
     });
   }
 
-  async function saveRecipe() {
-    const name = document.getElementById('recipeName').value.trim();
+  function saveRecipe() {
+    var name = document.getElementById('recipeName').value.trim();
     if (!name) { document.getElementById('recipeName').focus(); return; }
-    const tagInput = document.getElementById('tagInput').value.trim();
+    var tagInput = document.getElementById('tagInput').value.trim();
     if (tagInput) addTag(tagInput);
-    const data = {
-      name,
+    var data = {
+      name: name,
       source: document.getElementById('recipeSource').value.trim(),
       url: document.getElementById('recipeUrl').value.trim(),
       notes: document.getElementById('recipeNotes').value.trim(),
       rating: document.getElementById('recipeRating').value,
-      tags: [...pendingTags],
+      tags: pendingTags.slice(),
     };
-    try {
-      const id = editingId || genId();
-      const existing = editingId ? recipes.find(x => x.id === editingId) : null;
-      await setDoc(doc(db, 'recipes', id), {
-        ...data,
-        createdAt: existing ? existing.createdAt : Date.now(),
-      });
+    var id = editingId || genId();
+    var existing = editingId ? recipes.find(function(x){ return x.id === editingId; }) : null;
+    data.createdAt = existing ? existing.createdAt : Date.now();
+    recipesCol.doc(id).set(data).then(function() {
       closeModal('addModal');
-    } catch(e) {
+    }).catch(function(e) {
       console.error('Save failed', e);
       alert('Save failed — check your connection.');
-    }
+    });
   }
 
-  async function deleteRecipe(id) {
+  function deleteRecipe(id) {
     if (!confirm('Remove this recipe?')) return;
-    try {
-      await deleteDoc(doc(db, 'recipes', id));
+    recipesCol.doc(id).delete().then(function() {
       closeModal('detailModal');
-    } catch(e) {
-      console.error('Delete failed', e);
-    }
+    }).catch(function(e) { console.error('Delete failed', e); });
   }
 
   function showSyncStatus(msg, isError) {
-    let el = document.getElementById('syncStatus');
+    var el = document.getElementById('syncStatus');
     if (!el) {
       el = document.createElement('div');
       el.id = 'syncStatus';
@@ -697,8 +688,8 @@
   }
 
   function hideSyncStatus() {
-    const el = document.getElementById('syncStatus');
-    if (el) { setTimeout(() => { el.style.opacity = '0'; }, 1200); }
+    var el = document.getElementById('syncStatus');
+    if (el) { setTimeout(function(){ el.style.opacity = '0'; }, 1200); }
   }
 
   function genId() { return Date.now().toString(36) + Math.random().toString(36).slice(2,6); }
@@ -716,28 +707,26 @@
   }
 
   function renderDrawer() {
-    const now = Date.now();
-    const sevenDays = 7 * 24 * 60 * 60 * 1000;
-    const sourceMap = {};
-    recipes.forEach(r => { if (r.source) sourceMap[r.source] = (sourceMap[r.source] || 0) + 1; });
-    const tagMap = {};
-    recipes.forEach(r => (r.tags || []).forEach(t => { tagMap[t] = (tagMap[t] || 0) + 1; }));
-    const recentCount = recipes.filter(r => now - r.createdAt < sevenDays).length;
-    let html = `
-      <div class="drawer-item ${currentFilter==='all'?'active':''}" onclick="setFilter('all');closeDrawer()">All Recipes <span class="sidebar-count">${recipes.length}</span></div>
-      <div class="drawer-item ${currentFilter==='recent'?'active':''}" onclick="setFilter('recent');closeDrawer()">Recently Added <span class="sidebar-count">${recentCount}</span></div>
-    `;
+    var now = Date.now();
+    var sevenDays = 7 * 24 * 60 * 60 * 1000;
+    var sourceMap = {};
+    recipes.forEach(function(r) { if (r.source) sourceMap[r.source] = (sourceMap[r.source] || 0) + 1; });
+    var tagMap = {};
+    recipes.forEach(function(r) { (r.tags || []).forEach(function(t) { tagMap[t] = (tagMap[t] || 0) + 1; }); });
+    var recentCount = recipes.filter(function(r) { return now - r.createdAt < sevenDays; }).length;
+    var html = '<div class="drawer-item ' + (currentFilter==='all'?'active':'') + '" onclick="setFilter('all');closeDrawer()">All Recipes <span class="sidebar-count">' + recipes.length + '</span></div>';
+    html += '<div class="drawer-item ' + (currentFilter==='recent'?'active':'') + '" onclick="setFilter('recent');closeDrawer()">Recently Added <span class="sidebar-count">' + recentCount + '</span></div>';
     if (Object.keys(sourceMap).length) {
-      html += `<div class="drawer-section-label">Sources</div>`;
-      html += Object.entries(sourceMap).sort().map(([s,c]) =>
-        `<div class="drawer-item ${currentFilter==='source:'+s?'active':''}" onclick="setFilter('source:${esc(s)}');closeDrawer()">${esc(s)} <span class="sidebar-count">${c}</span></div>`
-      ).join('');
+      html += '<div class="drawer-section-label">Sources</div>';
+      Object.entries(sourceMap).sort().forEach(function(e) {
+        html += '<div class="drawer-item ' + (currentFilter==='source:'+e[0]?'active':'') + '" onclick="setFilter('source:' + esc(e[0]) + '');closeDrawer()">' + esc(e[0]) + ' <span class="sidebar-count">' + e[1] + '</span></div>';
+      });
     }
     if (Object.keys(tagMap).length) {
-      html += `<div class="drawer-section-label">Tags</div>`;
-      html += Object.entries(tagMap).sort().map(([t,c]) =>
-        `<div class="drawer-item ${currentFilter==='tag:'+t?'active':''}" onclick="setFilter('tag:${esc(t)}');closeDrawer()">${esc(t)} <span class="sidebar-count">${c}</span></div>`
-      ).join('');
+      html += '<div class="drawer-section-label">Tags</div>';
+      Object.entries(tagMap).sort().forEach(function(e) {
+        html += '<div class="drawer-item ' + (currentFilter==='tag:'+e[0]?'active':'') + '" onclick="setFilter('tag:' + esc(e[0]) + '');closeDrawer()">' + esc(e[0]) + ' <span class="sidebar-count">' + e[1] + '</span></div>';
+      });
     }
     document.getElementById('drawerContent').innerHTML = html;
   }
@@ -746,18 +735,18 @@
   function openAddModal() {
     editingId = null;
     document.getElementById('modalTitle').textContent = 'Add a Recipe';
-    ['recipeName','recipeSource','recipeUrl','recipeNotes'].forEach(id => document.getElementById(id).value = '');
+    ['recipeName','recipeSource','recipeUrl','recipeNotes'].forEach(function(id) { document.getElementById(id).value = ''; });
     document.getElementById('recipeRating').value = '';
     pendingTags = [];
     renderTagChips();
     updateTagSuggestions('');
     resetFetchState();
     document.getElementById('addModal').classList.add('open');
-    setTimeout(() => document.getElementById('recipeName').focus(), 100);
+    setTimeout(function() { document.getElementById('recipeName').focus(); }, 100);
   }
 
   function openEditModal(id) {
-    const r = recipes.find(x => x.id === id);
+    var r = recipes.find(function(x) { return x.id === id; });
     if (!r) return;
     editingId = id;
     document.getElementById('modalTitle').textContent = 'Edit Recipe';
@@ -766,7 +755,7 @@
     document.getElementById('recipeUrl').value = r.url || '';
     document.getElementById('recipeNotes').value = r.notes || '';
     document.getElementById('recipeRating').value = r.rating || '';
-    pendingTags = [...(r.tags || [])];
+    pendingTags = (r.tags || []).slice();
     renderTagChips();
     updateTagSuggestions('');
     resetFetchState();
@@ -778,82 +767,82 @@
 
   /* ── Tags ── */
   function addTag(val) {
-    const t = val.trim();
-    if (t && !pendingTags.includes(t)) { pendingTags.push(t); renderTagChips(); }
+    var t = val.trim();
+    if (t && pendingTags.indexOf(t) === -1) { pendingTags.push(t); renderTagChips(); }
     document.getElementById('tagInput').value = '';
     updateTagSuggestions('');
   }
 
-  function removeTag(t) { pendingTags = pendingTags.filter(x => x !== t); renderTagChips(); }
+  function removeTag(t) { pendingTags = pendingTags.filter(function(x) { return x !== t; }); renderTagChips(); }
 
   function renderTagChips() {
-    document.getElementById('tagChips').innerHTML = pendingTags.map(t =>
-      `<span class="tag-chip">${esc(t)}<button class="tag-chip-remove" onclick="removeTag('${esc(t)}')" type="button">×</button></span>`
-    ).join('');
+    document.getElementById('tagChips').innerHTML = pendingTags.map(function(t) {
+      return '<span class="tag-chip">' + esc(t) + '<button class="tag-chip-remove" onclick="removeTag('' + esc(t) + '')" type="button">×</button></span>';
+    }).join('');
   }
 
   function updateTagSuggestions(val) {
-    const used = new Set(pendingTags);
-    const s = PRESET_TAGS.filter(t => !used.has(t) && (val==='' || t.toLowerCase().includes(val.toLowerCase())));
-    document.getElementById('tagSuggestions').innerHTML = s.slice(0,12).map(t =>
-      `<button class="tag-suggestion" onclick="addTag('${esc(t)}')" type="button">${esc(t)}</button>`
-    ).join('');
+    var used = new Set(pendingTags);
+    var s = PRESET_TAGS.filter(function(t) { return !used.has(t) && (val==='' || t.toLowerCase().indexOf(val.toLowerCase()) !== -1); });
+    document.getElementById('tagSuggestions').innerHTML = s.slice(0,12).map(function(t) {
+      return '<button class="tag-suggestion" onclick="addTag('' + esc(t) + '')" type="button">' + esc(t) + '</button>';
+    }).join('');
   }
 
-  document.addEventListener('DOMContentLoaded', () => {
-    const tagInput = document.getElementById('tagInput');
-    tagInput.addEventListener('keydown', e => {
+  document.addEventListener('DOMContentLoaded', function() {
+    var tagInput = document.getElementById('tagInput');
+    tagInput.addEventListener('keydown', function(e) {
       if (e.key==='Enter'||e.key===',') { e.preventDefault(); addTag(tagInput.value); }
       if (e.key==='Backspace'&&tagInput.value===''&&pendingTags.length) removeTag(pendingTags[pendingTags.length-1]);
     });
-    tagInput.addEventListener('input', () => updateTagSuggestions(tagInput.value));
-    document.querySelectorAll('.modal-overlay').forEach(overlay => {
-      overlay.addEventListener('click', e => { if (e.target===overlay) overlay.classList.remove('open'); });
+    tagInput.addEventListener('input', function() { updateTagSuggestions(tagInput.value); });
+    document.querySelectorAll('.modal-overlay').forEach(function(overlay) {
+      overlay.addEventListener('click', function(e) { if (e.target===overlay) overlay.classList.remove('open'); });
     });
   });
 
   /* ── Sidebar ── */
   function renderSidebar() {
-    const now = Date.now();
-    const sevenDays = 7*24*60*60*1000;
-    const recent = recipes.filter(r => now-r.createdAt < sevenDays);
+    var now = Date.now();
+    var sevenDays = 7*24*60*60*1000;
+    var recent = recipes.filter(function(r) { return now-r.createdAt < sevenDays; });
     document.getElementById('count-all').textContent = recipes.length;
     document.getElementById('count-recent').textContent = recent.length;
-    const sourceMap = {};
-    recipes.forEach(r => { if (r.source) sourceMap[r.source] = (sourceMap[r.source]||0)+1; });
-    document.getElementById('sources-list').innerHTML = Object.entries(sourceMap).sort().map(([s,c]) =>
-      `<div class="sidebar-item ${currentFilter==='source:'+s?'active':''}" onclick="setFilter('source:${esc(s)}',this)"><span>${esc(s)}</span><span class="sidebar-count">${c}</span></div>`
-    ).join('') || '<div style="padding:4px 1.25rem;font-size:0.8rem;color:var(--text-light)">No sources yet</div>';
-    const dl = document.getElementById('sourcesList');
-    dl.innerHTML = Object.keys(sourceMap).map(s => `<option value="${esc(s)}">`).join('');
-    const tagMap = {};
-    recipes.forEach(r => (r.tags||[]).forEach(t => { tagMap[t]=(tagMap[t]||0)+1; }));
-    document.getElementById('tags-list').innerHTML = Object.entries(tagMap).sort().map(([t,c]) =>
-      `<div class="sidebar-item ${currentFilter==='tag:'+t?'active':''}" onclick="setFilter('tag:${esc(t)}',this)"><span>${esc(t)}</span><span class="sidebar-count">${c}</span></div>`
-    ).join('') || '<div style="padding:4px 1.25rem;font-size:0.8rem;color:var(--text-light)">No tags yet</div>';
+    var sourceMap = {};
+    recipes.forEach(function(r) { if (r.source) sourceMap[r.source] = (sourceMap[r.source]||0)+1; });
+    document.getElementById('sources-list').innerHTML = Object.entries(sourceMap).sort().map(function(e) {
+      return '<div class="sidebar-item ' + (currentFilter==='source:'+e[0]?'active':'') + '" onclick="setFilter('source:' + esc(e[0]) + '',this)"><span>' + esc(e[0]) + '</span><span class="sidebar-count">' + e[1] + '</span></div>';
+    }).join('') || '<div style="padding:4px 1.25rem;font-size:0.8rem;color:var(--text-light)">No sources yet</div>';
+    var dl = document.getElementById('sourcesList');
+    dl.innerHTML = Object.keys(sourceMap).map(function(s) { return '<option value="' + esc(s) + '">'; }).join('');
+    var tagMap = {};
+    recipes.forEach(function(r) { (r.tags||[]).forEach(function(t) { tagMap[t]=(tagMap[t]||0)+1; }); });
+    document.getElementById('tags-list').innerHTML = Object.entries(tagMap).sort().map(function(e) {
+      return '<div class="sidebar-item ' + (currentFilter==='tag:'+e[0]?'active':'') + '" onclick="setFilter('tag:' + esc(e[0]) + '',this)"><span>' + esc(e[0]) + '</span><span class="sidebar-count">' + e[1] + '</span></div>';
+    }).join('') || '<div style="padding:4px 1.25rem;font-size:0.8rem;color:var(--text-light)">No tags yet</div>';
   }
 
   /* ── Filter ── */
   function setFilter(filter, el) {
     currentFilter = filter;
-    document.querySelectorAll('.sidebar-item').forEach(i => i.classList.remove('active'));
+    document.querySelectorAll('.sidebar-item').forEach(function(i) { i.classList.remove('active'); });
     if (el) el.classList.add('active');
-    const labels = { all:'All Recipes', recent:'Recently Added' };
-    const title = labels[filter] || (filter.startsWith('source:')?filter.slice(7):filter.startsWith('tag:')?'#'+filter.slice(4):filter);
+    var labels = { all:'All Recipes', recent:'Recently Added' };
+    var title = labels[filter] || (filter.indexOf('source:')===0 ? filter.slice(7) : filter.indexOf('tag:')===0 ? '#'+filter.slice(4) : filter);
     document.getElementById('sectionTitle').textContent = title;
     document.getElementById('filterBottomBtn').classList.toggle('accent', filter !== 'all');
     renderRecipes();
   }
 
   function getFiltered() {
-    const now = Date.now();
-    const q = document.getElementById('searchInput').value.trim().toLowerCase();
-    return recipes.filter(r => {
+    var now = Date.now();
+    var q = document.getElementById('searchInput').value.trim().toLowerCase();
+    return recipes.filter(function(r) {
       if (currentFilter==='recent' && now-r.createdAt > 7*24*60*60*1000) return false;
-      if (currentFilter.startsWith('source:') && r.source!==currentFilter.slice(7)) return false;
-      if (currentFilter.startsWith('tag:') && !(r.tags||[]).includes(currentFilter.slice(4))) return false;
+      if (currentFilter.indexOf('source:')===0 && r.source!==currentFilter.slice(7)) return false;
+      if (currentFilter.indexOf('tag:')===0 && (r.tags||[]).indexOf(currentFilter.slice(4))===-1) return false;
       if (!q) return true;
-      return [r.name,r.source,r.notes,...(r.tags||[])].some(f => f&&f.toLowerCase().includes(q));
+      return [r.name,r.source,r.notes].concat(r.tags||[]).some(function(f) { return f&&f.toLowerCase().indexOf(q)!==-1; });
     });
   }
 
@@ -865,77 +854,71 @@
   }
 
   function renderRecipes() {
-    const filtered = getFiltered();
-    document.getElementById('sectionCount').textContent = filtered.length ? `${filtered.length} recipe${filtered.length!==1?'s':''}` : '';
-    const container = document.getElementById('recipeContainer');
+    var filtered = getFiltered();
+    document.getElementById('sectionCount').textContent = filtered.length ? filtered.length + ' recipe' + (filtered.length!==1?'s':'') : '';
+    var container = document.getElementById('recipeContainer');
     if (!filtered.length) {
-      container.innerHTML = `<div class="empty-state"><div class="empty-state-icon">🍳</div><h3>${recipes.length===0?'Your recipe box is empty':'No recipes found'}</h3><p>${recipes.length===0?'Tap "+ Add Recipe" to save your first one.':'Try adjusting your search or filter.'}</p></div>`;
+      container.innerHTML = '<div class="empty-state"><div class="empty-state-icon">🍳</div><h3>' + (recipes.length===0?'Your recipe box is empty':'No recipes found') + '</h3><p>' + (recipes.length===0?'Tap &quot;+ Add Recipe&quot; to save your first one.':'Try adjusting your search or filter.') + '</p></div>';
       return;
     }
-    const isMobile = window.innerWidth <= 640;
-    const view = isMobile ? 'list' : currentView;
+    var isMobile = window.innerWidth <= 640;
+    var view = isMobile ? 'list' : currentView;
     if (view==='list') {
-      container.innerHTML = '<div class="recipe-list">'+filtered.map(r=>cardHTML(r,true)).join('')+'</div>';
+      container.innerHTML = '<div class="recipe-list">' + filtered.map(function(r){ return cardHTML(r,true); }).join('') + '</div>';
     } else {
-      container.innerHTML = '<div class="recipe-grid">'+filtered.map(r=>cardHTML(r,false)).join('')+'</div>';
+      container.innerHTML = '<div class="recipe-grid">' + filtered.map(function(r){ return cardHTML(r,false); }).join('') + '</div>';
     }
   }
 
-  function ratingStars(r) { const n=parseInt(r); return n?'⭐'.repeat(n):''; }
+  function ratingStars(r) { var n=parseInt(r); return n?'⭐'.repeat(n):''; }
 
   function cardHTML(r, list) {
-    const tags = (r.tags||[]).slice(0,list?3:4).map(t=>`<span class="tag">${esc(t)}</span>`).join('');
-    const stars = r.rating?`<span style="font-size:0.72rem">${ratingStars(r.rating)}</span>`:'';
+    var tags = (r.tags||[]).slice(0,list?3:4).map(function(t){ return '<span class="tag">'+esc(t)+'</span>'; }).join('');
+    var stars = r.rating ? '<span style="font-size:0.72rem">'+ratingStars(r.rating)+'</span>' : '';
     if (list) {
-      return `<div class="recipe-card list-view" onclick="openDetail('${r.id}')">
-        <div style="flex:1;min-width:0">
-          <div class="recipe-card-title">${esc(r.name)}</div>
-          ${r.source?`<div class="recipe-card-source">${esc(r.source)}</div>`:''}
-          ${tags?`<div class="recipe-card-tags" style="margin-top:6px">${tags}</div>`:''}
-        </div>
-        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex-shrink:0">
-          ${stars}
-          <div style="display:flex;gap:4px">
-            <button class="icon-btn" onclick="event.stopPropagation();openEditModal('${r.id}')" title="Edit">✏️</button>
-            <button class="icon-btn danger" onclick="event.stopPropagation();deleteRecipe('${r.id}')" title="Delete">🗑️</button>
-          </div>
-        </div>
-      </div>`;
+      return '<div class="recipe-card list-view" onclick="openDetail(''+r.id+'')">'
+        + '<div style="flex:1;min-width:0">'
+        + '<div class="recipe-card-title">'+esc(r.name)+'</div>'
+        + (r.source?'<div class="recipe-card-source">'+esc(r.source)+'</div>':'')
+        + (tags?'<div class="recipe-card-tags" style="margin-top:6px">'+tags+'</div>':'')
+        + '</div>'
+        + '<div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex-shrink:0">'
+        + stars
+        + '<div style="display:flex;gap:4px">'
+        + '<button class="icon-btn" onclick="event.stopPropagation();openEditModal(''+r.id+'')" title="Edit">✏️</button>'
+        + '<button class="icon-btn danger" onclick="event.stopPropagation();deleteRecipe(''+r.id+'')" title="Delete">🗑️</button>'
+        + '</div></div></div>';
     }
-    return `<div class="recipe-card" onclick="openDetail('${r.id}')">
-      <div class="recipe-card-actions">
-        <button class="icon-btn" onclick="event.stopPropagation();openEditModal('${r.id}')" title="Edit">✏️</button>
-        <button class="icon-btn danger" onclick="event.stopPropagation();deleteRecipe('${r.id}')" title="Delete">🗑️</button>
-      </div>
-      ${r.source?`<div class="recipe-card-source">${esc(r.source)} ${stars}</div>`:stars?`<div class="recipe-card-source">${stars}</div>`:''}
-      <div class="recipe-card-title">${esc(r.name)}</div>
-      ${r.notes?`<div class="recipe-card-notes">${esc(r.notes)}</div>`:''}
-      ${tags?`<div class="recipe-card-tags">${tags}</div>`:''}
-    </div>`;
+    return '<div class="recipe-card" onclick="openDetail(''+r.id+'')">'
+      + '<div class="recipe-card-actions">'
+      + '<button class="icon-btn" onclick="event.stopPropagation();openEditModal(''+r.id+'')" title="Edit">✏️</button>'
+      + '<button class="icon-btn danger" onclick="event.stopPropagation();deleteRecipe(''+r.id+'')" title="Delete">🗑️</button>'
+      + '</div>'
+      + (r.source?'<div class="recipe-card-source">'+esc(r.source)+' '+stars+'</div>':(stars?'<div class="recipe-card-source">'+stars+'</div>':''))
+      + '<div class="recipe-card-title">'+esc(r.name)+'</div>'
+      + (r.notes?'<div class="recipe-card-notes">'+esc(r.notes)+'</div>':'')
+      + (tags?'<div class="recipe-card-tags">'+tags+'</div>':'')
+      + '</div>';
   }
 
   function openDetail(id) {
-    const r = recipes.find(x=>x.id===id);
+    var r = recipes.find(function(x){ return x.id===id; });
     if (!r) return;
-    const stars = r.rating?ratingStars(r.rating):'';
-    const dateStr = new Date(r.createdAt).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
-    const tags = (r.tags||[]).map(t=>`<span class="tag">${esc(t)}</span>`).join('');
-    document.getElementById('detailContent').innerHTML = `
-      ${r.source?`<div class="detail-source">${esc(r.source)}</div>`:''}
-      <div class="detail-title">${esc(r.name)}</div>
-      <div class="detail-meta">
-        ${stars?`<span>${stars}</span>`:''}
-        ${tags?`<div style="display:flex;flex-wrap:wrap;gap:5px">${tags}</div>`:''}
-      </div>
-      ${r.url?`<hr class="detail-divider"><div class="detail-section-label">Link</div><a class="detail-url" href="${esc(r.url)}" target="_blank" rel="noopener">${esc(r.url)} ↗</a>`:''}
-      ${r.notes?`<hr class="detail-divider"><div class="detail-section-label">Notes &amp; Recipe</div><div class="detail-notes">${esc(r.notes)}</div>`:''}
-      <div class="detail-footer">
-        <span class="detail-date">Saved ${dateStr}</span>
-        <div style="display:flex;gap:8px">
-          <button class="btn btn-ghost" onclick="openEditModal('${r.id}')">✏️ Edit</button>
-          <button class="btn btn-ghost" style="color:#c0392b;border-color:#c0392b" onclick="deleteRecipe('${r.id}')">🗑️ Delete</button>
-        </div>
-      </div>`;
+    var stars = r.rating?ratingStars(r.rating):'';
+    var dateStr = new Date(r.createdAt).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+    var tags = (r.tags||[]).map(function(t){ return '<span class="tag">'+esc(t)+'</span>'; }).join('');
+    document.getElementById('detailContent').innerHTML =
+      (r.source?'<div class="detail-source">'+esc(r.source)+'</div>':'')
+      + '<div class="detail-title">'+esc(r.name)+'</div>'
+      + '<div class="detail-meta">'+(stars?'<span>'+stars+'</span>':'')+(tags?'<div style="display:flex;flex-wrap:wrap;gap:5px">'+tags+'</div>':'')+'</div>'
+      + (r.url?'<hr class="detail-divider"><div class="detail-section-label">Link</div><a class="detail-url" href="'+esc(r.url)+'" target="_blank" rel="noopener">'+esc(r.url)+' ↗</a>':'')
+      + (r.notes?'<hr class="detail-divider"><div class="detail-section-label">Notes &amp; Recipe</div><div class="detail-notes">'+esc(r.notes)+'</div>':'')
+      + '<div class="detail-footer">'
+      + '<span class="detail-date">Saved '+dateStr+'</span>'
+      + '<div style="display:flex;gap:8px">'
+      + '<button class="btn btn-ghost" onclick="openEditModal(''+r.id+'')">✏️ Edit</button>'
+      + '<button class="btn btn-ghost" style="color:#c0392b;border-color:#c0392b" onclick="deleteRecipe(''+r.id+'')">🗑️ Delete</button>'
+      + '</div></div>';
     document.getElementById('detailModal').classList.add('open');
   }
 
@@ -945,93 +928,93 @@
 
   /* ── Fetch Recipe ── */
   function resetFetchState() {
-    const status = document.getElementById('fetchStatus');
-    status.style.display = 'none';
+    document.getElementById('fetchStatus').style.display = 'none';
     document.getElementById('fetchBtn').textContent = 'Fetch';
     document.getElementById('fetchBtn').disabled = false;
   }
 
-  async function fetchRecipe() {
-    const url = document.getElementById('recipeUrl').value.trim();
+  function fetchRecipe() {
+    var url = document.getElementById('recipeUrl').value.trim();
     if (!url) { showFetchStatus('Paste a URL first.','warn'); return; }
-    const btn = document.getElementById('fetchBtn');
+    var btn = document.getElementById('fetchBtn');
     btn.textContent = '…'; btn.disabled = true;
     showFetchStatus('Fetching recipe…','info');
-    const proxies = [
-      `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`,
-      `https://corsproxy.io/?${encodeURIComponent(url)}`,
+    var proxies = [
+      'https://api.allorigins.win/get?url=' + encodeURIComponent(url),
+      'https://corsproxy.io/?' + encodeURIComponent(url),
     ];
-    let html = null;
-    for (const proxy of proxies) {
-      try {
-        const res = await fetch(proxy, { signal: AbortSignal.timeout(12000) });
-        if (!res.ok) continue;
-        const data = await res.json().catch(()=>null);
-        html = data ? (data.contents||JSON.stringify(data)) : await res.text();
-        if (html && html.length > 500) break;
-      } catch { continue; }
+    var tried = 0;
+    function tryProxy() {
+      if (tried >= proxies.length) {
+        showFetchStatus('⚠️ Couldn't reach that page. Paste the recipe manually below.','error');
+        btn.textContent='Fetch'; btn.disabled=false; return;
+      }
+      fetch(proxies[tried++])
+        .then(function(res) { return res.json().catch(function(){ return res.text().then(function(t){ return {contents:t}; }); }); })
+        .then(function(data) {
+          var html = data.contents || JSON.stringify(data);
+          if (!html || html.length < 500) { tryProxy(); return; }
+          var parsed = parseRecipeFromHTML(html, url);
+          if (!parsed.name && !parsed.ingredients) {
+            showFetchStatus('⚠️ Page found but recipe not extracted — may be paywalled.','error');
+            btn.textContent='Fetch'; btn.disabled=false; return;
+          }
+          if (parsed.name) document.getElementById('recipeName').value = parsed.name;
+          if (parsed.source) document.getElementById('recipeSource').value = parsed.source;
+          if (parsed.notes) document.getElementById('recipeNotes').value = parsed.notes;
+          showFetchStatus('✓ Got the recipe! Review and save.','success');
+          btn.textContent='✓ Done';
+        })
+        .catch(function() { tryProxy(); });
     }
-    if (!html) {
-      showFetchStatus('⚠️ Couldn't reach that page. Paste the recipe manually below.','error');
-      btn.textContent='Fetch'; btn.disabled=false; return;
-    }
-    const parsed = parseRecipeFromHTML(html, url);
-    if (!parsed.name && !parsed.ingredients) {
-      showFetchStatus('⚠️ Page found but recipe not extracted — may be paywalled. Log into NYT in Safari first, then try again.','error');
-      btn.textContent='Fetch'; btn.disabled=false; return;
-    }
-    if (parsed.name) document.getElementById('recipeName').value = parsed.name;
-    if (parsed.source) document.getElementById('recipeSource').value = parsed.source;
-    if (parsed.notes) document.getElementById('recipeNotes').value = parsed.notes;
-    const filled = [parsed.name&&'title',parsed.ingredients&&'ingredients',parsed.instructions&&'instructions'].filter(Boolean);
-    showFetchStatus(`✓ Got ${filled.join(', ')}! Review and save.`,'success');
-    btn.textContent='✓ Done';
+    tryProxy();
   }
 
   function parseRecipeFromHTML(html, url) {
-    const ldMatches = html.match(/<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi)||[];
-    let data = null;
-    for (const block of ldMatches) {
+    var ldMatches = html.match(/<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi)||[];
+    var data = null;
+    for (var i=0; i<ldMatches.length; i++) {
       try {
-        const inner = block.replace(/<script[^>]*>/i,'').replace(/<\/script>/i,'').trim();
-        const j = JSON.parse(inner);
-        const items = Array.isArray(j)?j:(j['@graph']?j['@graph']:[j]);
-        for (const item of items) { if (item['@type']==='Recipe'||item['@type']==='recipe'){data=item;break;} }
+        var inner = ldMatches[i].replace(/<script[^>]*>/i,'').replace(/<\/script>/i,'').trim();
+        var j = JSON.parse(inner);
+        var items = Array.isArray(j)?j:(j['@graph']?j['@graph']:[j]);
+        for (var k=0; k<items.length; k++) { if (items[k]['@type']==='Recipe'||items[k]['@type']==='recipe'){data=items[k];break;} }
         if (data) break;
-      } catch { continue; }
+      } catch(e) { continue; }
     }
-    const hostname = (()=>{try{return new URL(url).hostname.replace(/^www\./,'');}catch{return '';}})();
-    const sourceMap = {'cooking.nytimes.com':'NYT Cooking','bonappetit.com':'Bon Appétit','seriouseats.com':'Serious Eats','food52.com':'Food52','epicurious.com':'Epicurious','allrecipes.com':'AllRecipes','smittenkitchen.com':'Smitten Kitchen','thekitchn.com':'The Kitchn'};
-    const source = sourceMap[hostname]||hostname.split('.').map(w=>w.charAt(0).toUpperCase()+w.slice(1)).join(' ');
-    if (!data) return { source };
-    const name = data.name||'';
-    let ingredients='', instructions='';
+    var hostname = '';
+    try { hostname = new URL(url).hostname.replace(/^www\./,''); } catch(e){}
+    var sourceMap = {'cooking.nytimes.com':'NYT Cooking','bonappetit.com':'Bon Appétit','seriouseats.com':'Serious Eats','food52.com':'Food52','epicurious.com':'Epicurious','allrecipes.com':'AllRecipes','smittenkitchen.com':'Smitten Kitchen','thekitchn.com':'The Kitchn'};
+    var source = sourceMap[hostname]||hostname.split('.').map(function(w){return w.charAt(0).toUpperCase()+w.slice(1);}).join(' ');
+    if (!data) return { source: source };
+    var name = data.name||'';
+    var ingredients='', instructions='';
     if (data.recipeIngredient&&data.recipeIngredient.length) ingredients=data.recipeIngredient.join('
 ');
     if (data.recipeInstructions) {
-      const ins=data.recipeInstructions;
+      var ins=data.recipeInstructions;
       if (typeof ins==='string') instructions=ins.replace(/<[^>]+>/g,'').trim();
-      else if (Array.isArray(ins)) instructions=ins.map((s,i)=>{const t=typeof s==='string'?s:(s.text||s.name||'');return`${i+1}. ${t.replace(/<[^>]+>/g,'').trim()}`;}).join('
+      else if (Array.isArray(ins)) instructions=ins.map(function(s,i){var t=typeof s==='string'?s:(s.text||s.name||'');return(i+1)+'. '+t.replace(/<[^>]+>/g,'').trim();}).join('
 ');
     }
-    const notes=[ingredients?'INGREDIENTS:
+    var notes=[ingredients?'INGREDIENTS:
 '+ingredients:'',instructions?'INSTRUCTIONS:
 '+instructions:''].filter(Boolean).join('
 
 ');
-    return { name, source, ingredients, instructions, notes };
+    return { name:name, source:source, ingredients:ingredients, instructions:instructions, notes:notes };
   }
 
   function showFetchStatus(msg, type) {
-    const el = document.getElementById('fetchStatus');
-    const colors = {info:'var(--text-muted)',success:'var(--accent)',error:'#c0392b',warn:'#b07d00'};
+    var el = document.getElementById('fetchStatus');
+    var colors = {info:'var(--text-muted)',success:'var(--accent)',error:'#c0392b',warn:'#b07d00'};
     el.style.display='block'; el.style.color=colors[type]||'var(--text-muted)'; el.textContent=msg;
   }
 
   /* ── Bookmarklet ── */
   function openBookmarkletModal() {
-    const appUrl = window.location.href.split('?')[0].split('#')[0];
-    const bookmarkletCode = `javascript:(function(){var s=document.querySelectorAll('script[type="application/ld+json"]'),data=null;for(var i=0;i<s.length;i++){try{var j=JSON.parse(s[i].textContent);var items=Array.isArray(j)?j:[j];for(var k=0;k<items.length;k++){if(items[k]['@type']==='Recipe'||items[k]['@type']==='recipe'){data=items[k];break;}}if(data)break;}catch(e){}}var name=data&&data.name?data.name:document.title.replace(/\s*[\|\-–].*$/,'').trim();var source=location.hostname.replace(/^www\./,'').replace(/\.com$/,'').replace(/\.org$/,'').split('.').map(function(w){return w.charAt(0).toUpperCase()+w.slice(1);}).join(' ');var ingredients='',instructions='';if(data){if(data.recipeIngredient&&data.recipeIngredient.length){ingredients=data.recipeIngredient.join('\n');}if(data.recipeInstructions){var ins=data.recipeInstructions;if(typeof ins==='string'){instructions=ins;}else if(Array.isArray(ins)){instructions=ins.map(function(s,i){var t=typeof s==='string'?s:(s.text||s.name||'');return(i+1)+'. '+t;}).join('\n');}}}var notes=(ingredients?'INGREDIENTS:\n'+ingredients+'\n\n':'')+(instructions?'INSTRUCTIONS:\n'+instructions:'');var p=new URLSearchParams({name:name,source:source,url:location.href,notes:notes.trim()});window.open('${appUrl}?import=1&'+p.toString(),'_blank');})();`;
+    var appUrl = window.location.href.split('?')[0].split('#')[0];
+    var bookmarkletCode = 'javascript:(function(){var s=document.querySelectorAll('script[type="application/ld+json"]'),data=null;for(var i=0;i<s.length;i++){try{var j=JSON.parse(s[i].textContent);var items=Array.isArray(j)?j:[j];for(var k=0;k<items.length;k++){if(items[k]['@type']==="Recipe"||items[k]['@type']==="recipe"){data=items[k];break;}}if(data)break;}catch(e){}}var name=data&&data.name?data.name:document.title.replace(/\s*[\|\-–].*$/,"").trim();var source=location.hostname.replace(/^www\./,"").replace(/\.com$/,"").replace(/\.org$/,"").split(".").map(function(w){return w.charAt(0).toUpperCase()+w.slice(1);}).join(" ");var ingredients="",instructions="";if(data){if(data.recipeIngredient&&data.recipeIngredient.length){ingredients=data.recipeIngredient.join("\n");}if(data.recipeInstructions){var ins=data.recipeInstructions;if(typeof ins==="string"){instructions=ins;}else if(Array.isArray(ins)){instructions=ins.map(function(s,i){var t=typeof s==="string"?s:(s.text||s.name||"");return(i+1)+". "+t;}).join("\n");}}}var notes=(ingredients?"INGREDIENTS:\n"+ingredients+"\n\n":"")+(instructions?"INSTRUCTIONS:\n"+instructions:"");var p=new URLSearchParams({name:name,source:source,url:location.href,notes:notes.trim()});window.open("' + appUrl + '?import=1&"+p.toString(),"_blank");})();';
     document.getElementById('bookmarkletLink').href = bookmarkletCode;
     document.getElementById('bookmarkletModal').classList.add('open');
   }
@@ -1052,28 +1035,17 @@
     window.history.replaceState({}, '', window.location.pathname);
   }
 
+  var _importChecked = false;
   function checkImportParams() {
-    const p = new URLSearchParams(window.location.search);
-    if (p.get('import')==='1') openAddModalPrefilled({name:p.get('name')||'',source:p.get('source')||'',url:p.get('url')||'',notes:p.get('notes')||''});
+    if (_importChecked) return;
+    var p = new URLSearchParams(window.location.search);
+    if (p.get('import')==='1') {
+      _importChecked = true;
+      openAddModalPrefilled({name:p.get('name')||'',source:p.get('source')||'',url:p.get('url')||'',notes:p.get('notes')||''});
+    }
   }
 
-  /* ── expose functions needed by inline onclick handlers ── */
-  window.openAddModal = openAddModal;
-  window.openEditModal = openEditModal;
-  window.openDetail = openDetail;
-  window.closeModal = closeModal;
-  window.deleteRecipe = deleteRecipe;
-  window.saveRecipe = saveRecipe;
-  window.setFilter = setFilter;
-  window.setView = setView;
-  window.openDrawer = openDrawer;
-  window.closeDrawer = closeDrawer;
-  window.addTag = addTag;
-  window.removeTag = removeTag;
-  window.fetchRecipe = fetchRecipe;
-  window.resetFetchState = resetFetchState;
-  window.openBookmarkletModal = openBookmarkletModal;
-
   load();
-  checkImportParams();
-</script></html>
+</script>
+</body>
+</html>
