@@ -606,33 +606,99 @@
   <div class="modal" id="detailContent"></div>
 </div>
 
-<script>
-  const STORAGE_KEY = 'recipebox_v1';
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+  import { getFirestore, collection, doc, getDocs, setDoc, deleteDoc, onSnapshot, orderBy, query } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyDz8BYTZEv6GTb_NhTi056ZMsRtV3cqCrc",
+    authDomain: "recipe-box-dca97.firebaseapp.com",
+    projectId: "recipe-box-dca97",
+    storageBucket: "recipe-box-dca97.firebasestorage.app",
+    messagingSenderId: "74114653670",
+    appId: "1:74114653670:web:0cd519c78c12fe3b24ca27"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const db = getFirestore(app);
+  const recipesCol = collection(db, 'recipes');
+
   let recipes = [];
   let editingId = null;
   let currentFilter = 'all';
   let currentView = 'grid';
   let pendingTags = [];
-  let isSaving = false;
 
   const PRESET_TAGS = ['Breakfast','Lunch','Dinner','Snack','Dessert','Pasta','Chicken','Beef','Pork','Seafood','Vegetarian','Vegan','Soup','Salad','Grill','Quick','Weekend','Make Again','Holiday'];
 
-  async function load() {
-    try {
-      const result = await window.storage.get(STORAGE_KEY);
-      recipes = result ? JSON.parse(result.value) : [];
-    } catch { recipes = []; }
-    renderSidebar();
-    renderRecipes();
+  /* ── Firebase sync ── */
+  function load() {
+    showSyncStatus('Connecting…');
+    const q = query(recipesCol, orderBy('createdAt', 'desc'));
+    onSnapshot(q, (snapshot) => {
+      recipes = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+      renderSidebar();
+      renderRecipes();
+      hideSyncStatus();
+    }, (err) => {
+      console.error('Firestore error', err);
+      showSyncStatus('Offline — changes may not save', true);
+    });
   }
 
-  async function save() {
-    isSaving = true;
-    try { await window.storage.set(STORAGE_KEY, JSON.stringify(recipes)); }
-    catch (e) { console.error('Save failed', e); }
-    isSaving = false;
-    renderSidebar();
-    renderRecipes();
+  async function saveRecipe() {
+    const name = document.getElementById('recipeName').value.trim();
+    if (!name) { document.getElementById('recipeName').focus(); return; }
+    const tagInput = document.getElementById('tagInput').value.trim();
+    if (tagInput) addTag(tagInput);
+    const data = {
+      name,
+      source: document.getElementById('recipeSource').value.trim(),
+      url: document.getElementById('recipeUrl').value.trim(),
+      notes: document.getElementById('recipeNotes').value.trim(),
+      rating: document.getElementById('recipeRating').value,
+      tags: [...pendingTags],
+    };
+    try {
+      const id = editingId || genId();
+      const existing = editingId ? recipes.find(x => x.id === editingId) : null;
+      await setDoc(doc(db, 'recipes', id), {
+        ...data,
+        createdAt: existing ? existing.createdAt : Date.now(),
+      });
+      closeModal('addModal');
+    } catch(e) {
+      console.error('Save failed', e);
+      alert('Save failed — check your connection.');
+    }
+  }
+
+  async function deleteRecipe(id) {
+    if (!confirm('Remove this recipe?')) return;
+    try {
+      await deleteDoc(doc(db, 'recipes', id));
+      closeModal('detailModal');
+    } catch(e) {
+      console.error('Delete failed', e);
+    }
+  }
+
+  function showSyncStatus(msg, isError) {
+    let el = document.getElementById('syncStatus');
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'syncStatus';
+      el.style.cssText = 'position:fixed;bottom:calc(var(--bottombar-h) + 8px);left:50%;transform:translateX(-50%);background:var(--text);color:var(--bg);font-size:0.78rem;padding:6px 14px;border-radius:20px;z-index:300;white-space:nowrap;transition:opacity 0.3s';
+      document.body.appendChild(el);
+    }
+    el.textContent = msg;
+    el.style.background = isError ? '#c0392b' : 'var(--text)';
+    el.style.opacity = '1';
+  }
+
+  function hideSyncStatus() {
+    const el = document.getElementById('syncStatus');
+    if (el) { setTimeout(() => { el.style.opacity = '0'; }, 1200); }
   }
 
   function genId() { return Date.now().toString(36) + Math.random().toString(36).slice(2,6); }
@@ -652,32 +718,27 @@
   function renderDrawer() {
     const now = Date.now();
     const sevenDays = 7 * 24 * 60 * 60 * 1000;
-
     const sourceMap = {};
     recipes.forEach(r => { if (r.source) sourceMap[r.source] = (sourceMap[r.source] || 0) + 1; });
     const tagMap = {};
     recipes.forEach(r => (r.tags || []).forEach(t => { tagMap[t] = (tagMap[t] || 0) + 1; }));
     const recentCount = recipes.filter(r => now - r.createdAt < sevenDays).length;
-
     let html = `
       <div class="drawer-item ${currentFilter==='all'?'active':''}" onclick="setFilter('all');closeDrawer()">All Recipes <span class="sidebar-count">${recipes.length}</span></div>
       <div class="drawer-item ${currentFilter==='recent'?'active':''}" onclick="setFilter('recent');closeDrawer()">Recently Added <span class="sidebar-count">${recentCount}</span></div>
     `;
-
     if (Object.keys(sourceMap).length) {
       html += `<div class="drawer-section-label">Sources</div>`;
       html += Object.entries(sourceMap).sort().map(([s,c]) =>
         `<div class="drawer-item ${currentFilter==='source:'+s?'active':''}" onclick="setFilter('source:${esc(s)}');closeDrawer()">${esc(s)} <span class="sidebar-count">${c}</span></div>`
       ).join('');
     }
-
     if (Object.keys(tagMap).length) {
       html += `<div class="drawer-section-label">Tags</div>`;
       html += Object.entries(tagMap).sort().map(([t,c]) =>
         `<div class="drawer-item ${currentFilter==='tag:'+t?'active':''}" onclick="setFilter('tag:${esc(t)}');closeDrawer()">${esc(t)} <span class="sidebar-count">${c}</span></div>`
       ).join('');
     }
-
     document.getElementById('drawerContent').innerHTML = html;
   }
 
@@ -714,36 +775,6 @@
   }
 
   function closeModal(id) { document.getElementById(id).classList.remove('open'); }
-
-  async function saveRecipe() {
-    const name = document.getElementById('recipeName').value.trim();
-    if (!name) { document.getElementById('recipeName').focus(); return; }
-    const tagInput = document.getElementById('tagInput').value.trim();
-    if (tagInput) addTag(tagInput);
-    const data = {
-      name,
-      source: document.getElementById('recipeSource').value.trim(),
-      url: document.getElementById('recipeUrl').value.trim(),
-      notes: document.getElementById('recipeNotes').value.trim(),
-      rating: document.getElementById('recipeRating').value,
-      tags: [...pendingTags],
-    };
-    if (editingId) {
-      const idx = recipes.findIndex(x => x.id === editingId);
-      if (idx !== -1) recipes[idx] = { ...recipes[idx], ...data };
-    } else {
-      recipes.unshift({ id: genId(), createdAt: Date.now(), ...data });
-    }
-    await save();
-    closeModal('addModal');
-  }
-
-  async function deleteRecipe(id) {
-    if (!confirm('Remove this recipe?')) return;
-    recipes = recipes.filter(x => x.id !== id);
-    await save();
-    closeModal('detailModal');
-  }
 
   /* ── Tags ── */
   function addTag(val) {
@@ -788,16 +819,13 @@
     const recent = recipes.filter(r => now-r.createdAt < sevenDays);
     document.getElementById('count-all').textContent = recipes.length;
     document.getElementById('count-recent').textContent = recent.length;
-
     const sourceMap = {};
     recipes.forEach(r => { if (r.source) sourceMap[r.source] = (sourceMap[r.source]||0)+1; });
     document.getElementById('sources-list').innerHTML = Object.entries(sourceMap).sort().map(([s,c]) =>
       `<div class="sidebar-item ${currentFilter==='source:'+s?'active':''}" onclick="setFilter('source:${esc(s)}',this)"><span>${esc(s)}</span><span class="sidebar-count">${c}</span></div>`
     ).join('') || '<div style="padding:4px 1.25rem;font-size:0.8rem;color:var(--text-light)">No sources yet</div>';
-
     const dl = document.getElementById('sourcesList');
     dl.innerHTML = Object.keys(sourceMap).map(s => `<option value="${esc(s)}">`).join('');
-
     const tagMap = {};
     recipes.forEach(r => (r.tags||[]).forEach(t => { tagMap[t]=(tagMap[t]||0)+1; }));
     document.getElementById('tags-list').innerHTML = Object.entries(tagMap).sort().map(([t,c]) =>
@@ -811,13 +839,9 @@
     document.querySelectorAll('.sidebar-item').forEach(i => i.classList.remove('active'));
     if (el) el.classList.add('active');
     const labels = { all:'All Recipes', recent:'Recently Added' };
-    const title = labels[filter] || (filter.startsWith('source:')?filter.slice(7):filter.startsWith('tag:')? '#'+filter.slice(4):filter);
+    const title = labels[filter] || (filter.startsWith('source:')?filter.slice(7):filter.startsWith('tag:')?'#'+filter.slice(4):filter);
     document.getElementById('sectionTitle').textContent = title;
-
-    // update mobile filter button indicator
-    const btn = document.getElementById('filterBottomBtn');
-    btn.classList.toggle('accent', filter !== 'all');
-
+    document.getElementById('filterBottomBtn').classList.toggle('accent', filter !== 'all');
     renderRecipes();
   }
 
@@ -948,7 +972,7 @@
       } catch { continue; }
     }
     if (!html) {
-      showFetchStatus('⚠️ Couldn\'t reach that page. Paste the recipe manually below.','error');
+      showFetchStatus('⚠️ Couldn't reach that page. Paste the recipe manually below.','error');
       btn.textContent='Fetch'; btn.disabled=false; return;
     }
     const parsed = parseRecipeFromHTML(html, url);
@@ -982,13 +1006,19 @@
     if (!data) return { source };
     const name = data.name||'';
     let ingredients='', instructions='';
-    if (data.recipeIngredient&&data.recipeIngredient.length) ingredients=data.recipeIngredient.join('\n');
+    if (data.recipeIngredient&&data.recipeIngredient.length) ingredients=data.recipeIngredient.join('
+');
     if (data.recipeInstructions) {
       const ins=data.recipeInstructions;
       if (typeof ins==='string') instructions=ins.replace(/<[^>]+>/g,'').trim();
-      else if (Array.isArray(ins)) instructions=ins.map((s,i)=>{const t=typeof s==='string'?s:(s.text||s.name||'');return`${i+1}. ${t.replace(/<[^>]+>/g,'').trim()}`;}).join('\n');
+      else if (Array.isArray(ins)) instructions=ins.map((s,i)=>{const t=typeof s==='string'?s:(s.text||s.name||'');return`${i+1}. ${t.replace(/<[^>]+>/g,'').trim()}`;}).join('
+');
     }
-    const notes=[ingredients?'INGREDIENTS:\n'+ingredients:'',instructions?'INSTRUCTIONS:\n'+instructions:''].filter(Boolean).join('\n\n');
+    const notes=[ingredients?'INGREDIENTS:
+'+ingredients:'',instructions?'INSTRUCTIONS:
+'+instructions:''].filter(Boolean).join('
+
+');
     return { name, source, ingredients, instructions, notes };
   }
 
@@ -1001,7 +1031,7 @@
   /* ── Bookmarklet ── */
   function openBookmarkletModal() {
     const appUrl = window.location.href.split('?')[0].split('#')[0];
-    const bookmarkletCode = `javascript:(function(){var s=document.querySelectorAll('script[type="application/ld+json"]'),data=null;for(var i=0;i<s.length;i++){try{var j=JSON.parse(s[i].textContent);var items=Array.isArray(j)?j:[j];for(var k=0;k<items.length;k++){if(items[k]['@type']==='Recipe'||items[k]['@type']==='recipe'){data=items[k];break;}}if(data)break;}catch(e){}}var name=data&&data.name?data.name:document.title.replace(/\\s*[\\|\\-\u2013].*$/,'').trim();var source=location.hostname.replace(/^www\\./,'').replace(/\\.com$/,'').replace(/\\.org$/,'').split('.').map(function(w){return w.charAt(0).toUpperCase()+w.slice(1);}).join(' ');var ingredients='',instructions='';if(data){if(data.recipeIngredient&&data.recipeIngredient.length){ingredients=data.recipeIngredient.join('\\n');}if(data.recipeInstructions){var ins=data.recipeInstructions;if(typeof ins==='string'){instructions=ins;}else if(Array.isArray(ins)){instructions=ins.map(function(s,i){var t=typeof s==='string'?s:(s.text||s.name||'');return(i+1)+'. '+t;}).join('\\n');}}}var notes=(ingredients?'INGREDIENTS:\\n'+ingredients+'\\n\\n':'')+(instructions?'INSTRUCTIONS:\\n'+instructions:'');var p=new URLSearchParams({name:name,source:source,url:location.href,notes:notes.trim()});window.open('${appUrl}?import=1&'+p.toString(),'_blank');})();`;
+    const bookmarkletCode = `javascript:(function(){var s=document.querySelectorAll('script[type="application/ld+json"]'),data=null;for(var i=0;i<s.length;i++){try{var j=JSON.parse(s[i].textContent);var items=Array.isArray(j)?j:[j];for(var k=0;k<items.length;k++){if(items[k]['@type']==='Recipe'||items[k]['@type']==='recipe'){data=items[k];break;}}if(data)break;}catch(e){}}var name=data&&data.name?data.name:document.title.replace(/\s*[\|\-–].*$/,'').trim();var source=location.hostname.replace(/^www\./,'').replace(/\.com$/,'').replace(/\.org$/,'').split('.').map(function(w){return w.charAt(0).toUpperCase()+w.slice(1);}).join(' ');var ingredients='',instructions='';if(data){if(data.recipeIngredient&&data.recipeIngredient.length){ingredients=data.recipeIngredient.join('\n');}if(data.recipeInstructions){var ins=data.recipeInstructions;if(typeof ins==='string'){instructions=ins;}else if(Array.isArray(ins)){instructions=ins.map(function(s,i){var t=typeof s==='string'?s:(s.text||s.name||'');return(i+1)+'. '+t;}).join('\n');}}}var notes=(ingredients?'INGREDIENTS:\n'+ingredients+'\n\n':'')+(instructions?'INSTRUCTIONS:\n'+instructions:'');var p=new URLSearchParams({name:name,source:source,url:location.href,notes:notes.trim()});window.open('${appUrl}?import=1&'+p.toString(),'_blank');})();`;
     document.getElementById('bookmarkletLink').href = bookmarkletCode;
     document.getElementById('bookmarkletModal').classList.add('open');
   }
@@ -1027,7 +1057,23 @@
     if (p.get('import')==='1') openAddModalPrefilled({name:p.get('name')||'',source:p.get('source')||'',url:p.get('url')||'',notes:p.get('notes')||''});
   }
 
-  load().then(()=>checkImportParams());
-</script>
-</body>
-</html>
+  /* ── expose functions needed by inline onclick handlers ── */
+  window.openAddModal = openAddModal;
+  window.openEditModal = openEditModal;
+  window.openDetail = openDetail;
+  window.closeModal = closeModal;
+  window.deleteRecipe = deleteRecipe;
+  window.saveRecipe = saveRecipe;
+  window.setFilter = setFilter;
+  window.setView = setView;
+  window.openDrawer = openDrawer;
+  window.closeDrawer = closeDrawer;
+  window.addTag = addTag;
+  window.removeTag = removeTag;
+  window.fetchRecipe = fetchRecipe;
+  window.resetFetchState = resetFetchState;
+  window.openBookmarkletModal = openBookmarkletModal;
+
+  load();
+  checkImportParams();
+</script></html>
