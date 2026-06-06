@@ -3,6 +3,34 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content="Recipe Box" />
+  <meta name="theme-color" content="#3a6b35" />
+  <link rel="apple-touch-icon" id="touch-icon" href="" />
+  <link rel="icon" id="fav-icon" href="" />
+  <script>
+    (function(){
+      var c=document.createElement('canvas');
+      c.width=c.height=180;
+      var ctx=c.getContext('2d');
+      ctx.fillStyle='#3a6b35';
+      var r=40,w=180,h=180;
+      ctx.beginPath();
+      ctx.moveTo(r,0);ctx.lineTo(w-r,0);ctx.quadraticCurveTo(w,0,w,r);
+      ctx.lineTo(w,h-r);ctx.quadraticCurveTo(w,h,w-r,h);
+      ctx.lineTo(r,h);ctx.quadraticCurveTo(0,h,0,h-r);
+      ctx.lineTo(0,r);ctx.quadraticCurveTo(0,0,r,0);
+      ctx.closePath();ctx.fill();
+      ctx.font='110px serif';
+      ctx.textAlign='center';
+      ctx.textBaseline='middle';
+      ctx.fillText('\uD83C\uDF73',90,95);
+      var url=c.toDataURL('image/png');
+      document.getElementById('touch-icon').href=url;
+      document.getElementById('fav-icon').href=url;
+    })();
+  </script>
   <title>Recipe Box</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
